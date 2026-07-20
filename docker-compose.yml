@@ -1,0 +1,27 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: restaurateur_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: restaurateur
+      POSTGRES_PASSWORD: restaurateur_dev
+      POSTGRES_DB: restaurateur
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer:latest
+    container_name: restaurateur_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
