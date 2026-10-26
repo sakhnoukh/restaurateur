@@ -3,7 +3,19 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 
 from app.database import Base
-from app.models import Customer, Reservation, Transaction  # noqa: F401
+from app.models import (  # noqa: F401
+    Customer,
+    Reservation,
+    Transaction,
+    RestaurantTable,
+    Staff,
+    RateRule,
+    MenuItem,
+    Expense,
+    Campaign,
+    InventoryItem,
+    MaintenanceTicket,
+)
 from app.config import settings
 
 config = context.config

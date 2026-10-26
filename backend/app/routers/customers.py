@@ -1,6 +1,8 @@
+import uuid as uuid_mod
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
 
 from app.database import get_db
 from app import crud, schemas
@@ -8,7 +10,8 @@ from app import crud, schemas
 router = APIRouter(prefix="/customers", tags=["customers"])
 
 
-@router.get("/", response_model=list[schemas.CustomerOut])
+@router.get("", response_model=list[schemas.CustomerOut])
+@router.get("/", response_model=list[schemas.CustomerOut], include_in_schema=False)
 def list_customers(
     skip: int = 0,
     limit: int = 50,
@@ -18,9 +21,16 @@ def list_customers(
     return crud.get_customers(db, skip=skip, limit=limit, search=search)
 
 
+@router.get("/lookup", response_model=Optional[schemas.CustomerOut])
+def lookup_customer_by_phone(
+    phone: str = Query(..., description="Exact phone number to look up"),
+    db: Session = Depends(get_db),
+):
+    return crud.get_customer_by_phone(db, phone)
+
+
 @router.get("/{customer_id}", response_model=schemas.CustomerDetail)
 def get_customer(customer_id: str, db: Session = Depends(get_db)):
-    import uuid as uuid_mod
     try:
         cid = uuid_mod.UUID(customer_id)
     except ValueError:
@@ -31,7 +41,8 @@ def get_customer(customer_id: str, db: Session = Depends(get_db)):
     return customer
 
 
-@router.post("/", response_model=schemas.CustomerOut, status_code=201)
+@router.post("", response_model=schemas.CustomerOut, status_code=201)
+@router.post("/", response_model=schemas.CustomerOut, status_code=201, include_in_schema=False)
 def create_customer(data: schemas.CustomerCreate, db: Session = Depends(get_db)):
     existing = crud.get_customer_by_phone(db, data.phone_number)
     if existing:
@@ -41,7 +52,6 @@ def create_customer(data: schemas.CustomerCreate, db: Session = Depends(get_db))
 
 @router.patch("/{customer_id}", response_model=schemas.CustomerOut)
 def update_customer(customer_id: str, data: schemas.CustomerUpdate, db: Session = Depends(get_db)):
-    import uuid as uuid_mod
     try:
         cid = uuid_mod.UUID(customer_id)
     except ValueError:
@@ -54,7 +64,6 @@ def update_customer(customer_id: str, data: schemas.CustomerUpdate, db: Session 
 
 @router.delete("/{customer_id}", status_code=204)
 def delete_customer(customer_id: str, db: Session = Depends(get_db)):
-    import uuid as uuid_mod
     try:
         cid = uuid_mod.UUID(customer_id)
     except ValueError:

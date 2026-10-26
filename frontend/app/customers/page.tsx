@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Search, Loader2, Phone, TrendingUp, AlertTriangle } from "lucide-react";
+import { Search, Loader2, Phone, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { api, type Customer } from "@/lib/api";
 import { TierBadge } from "@/components/Badges";
+import { CreateCustomerModal } from "@/components/CreateCustomerModal";
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -37,7 +39,16 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600"
+        >
+          <UserPlus className="w-4 h-4" />
+          New Customer
+        </button>
+      </div>
 
       {/* Search */}
       <div className="relative max-w-md">
@@ -111,6 +122,13 @@ export default function CustomersPage() {
             </Link>
           ))}
         </div>
+      )}
+
+      {showCreateModal && (
+        <CreateCustomerModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={loadData}
+        />
       )}
     </div>
   );

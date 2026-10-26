@@ -29,3 +29,8 @@ def get_timeline(
             reservations=[schemas.ReservationWithCustomer.model_validate(r) for r in reservations],
         ))
     return result
+
+
+@router.get("/analytics", response_model=schemas.AnalyticsReportOut)
+def get_analytics(db: Session = Depends(get_db)):
+    return crud.get_analytics_report(db)

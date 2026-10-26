@@ -1,3 +1,11 @@
 .env
 /venv
 PRD.md
+node_modules/
+.next/
+__pycache__/
+*.pyc
+*.egg-info/
+.DS_Store
+*.db
+.pytest_cache/

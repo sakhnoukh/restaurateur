@@ -2,9 +2,19 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Phone, TrendingUp, Users, AlertTriangle, Loader2, Save } from "lucide-react";
-import { api, type CustomerDetail, type LoyaltyTier } from "@/lib/api";
+import {
+  ArrowLeft,
+  Phone,
+  TrendingUp,
+  Users,
+  AlertTriangle,
+  Loader2,
+  Save,
+  Receipt,
+} from "lucide-react";
+import { api, type CustomerDetail, type LoyaltyTier, type Reservation } from "@/lib/api";
 import { TierBadge, StatusBadge } from "@/components/Badges";
+import { RecordBillModal } from "@/components/RecordBillModal";
 
 const tierOptions: LoyaltyTier[] = ["none", "silver", "gold", "vip"];
 
@@ -18,8 +28,10 @@ export default function CustomerDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editTier, setEditTier] = useState<LoyaltyTier>("none");
+  const [editPreferredPax, setEditPreferredPax] = useState("");
   const [editTags, setEditTags] = useState("");
   const [saving, setSaving] = useState(false);
+  const [billingReservation, setBillingReservation] = useState<Reservation | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -28,6 +40,7 @@ export default function CustomerDetailPage() {
       setCustomer(data);
       setEditName(data.name);
       setEditTier(data.loyalty_tier);
+      setEditPreferredPax(data.preferred_pax ? String(data.preferred_pax) : "");
       setEditTags(data.tags?.join(", ") ?? "");
     } catch (err) {
       console.error("Failed to load customer:", err);
@@ -43,10 +56,14 @@ export default function CustomerDetailPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const tags = editTags.split(",").map((t) => t.trim()).filter(Boolean);
+      const tags = editTags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
       await api.updateCustomer(id, {
         name: editName,
         loyalty_tier: editTier,
+        preferred_pax: editPreferredPax ? parseInt(editPreferredPax, 10) : null,
         tags,
       });
       await loadData();
@@ -105,19 +122,30 @@ export default function CustomerDetailPage() {
               <p className="text-sm text-gray-500 flex items-center gap-1 mt-1">
                 <Phone className="w-3 h-3" />
                 {customer.phone_number}
+                {customer.preferred_pax ? ` · Prefers ${customer.preferred_pax} pax` : ""}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {editing ? (
               <>
+                <input
+                  type="number"
+                  min={1}
+                  value={editPreferredPax}
+                  onChange={(e) => setEditPreferredPax(e.target.value)}
+                  placeholder="Pref. pax"
+                  className="w-24 px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                />
                 <select
                   value={editTier}
                   onChange={(e) => setEditTier(e.target.value as LoyaltyTier)}
                   className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
                 >
                   {tierOptions.map((t) => (
-                    <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                    <option key={t} value={t}>
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </option>
                   ))}
                 </select>
                 <button
@@ -159,7 +187,8 @@ export default function CustomerDetailPage() {
             className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-4"
           />
         ) : (
-          customer.tags && customer.tags.length > 0 && (
+          customer.tags &&
+          customer.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mb-4">
               {customer.tags.map((tag) => (
                 <span
@@ -196,50 +225,99 @@ export default function CustomerDetailPage() {
               <TrendingUp className="w-4 h-4 text-gray-400" />
               <span className="text-xs text-gray-500">Avg Spend</span>
             </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {avgSpend.toFixed(0)} EGP
-            </p>
+            <p className="text-2xl font-bold text-gray-900">{avgSpend.toFixed(0)} EGP</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="w-4 h-4 text-gray-400" />
               <span className="text-xs text-gray-500">No-Shows</span>
             </div>
-            <p className={`text-2xl font-bold ${customer.no_show_count > 1 ? "text-red-500" : "text-gray-900"}`}>
+            <p
+              className={`text-2xl font-bold ${
+                customer.no_show_count > 1 ? "text-red-500" : "text-gray-900"
+              }`}
+            >
               {customer.no_show_count}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Reservation History */}
+      {/* Reservation & POS Spend History */}
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="p-5 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-900">Reservation History</h2>
+          <h2 className="font-semibold text-gray-900">Reservation & POS History</h2>
         </div>
         {customer.reservations.length === 0 ? (
           <p className="text-center text-gray-400 py-8">No reservations yet</p>
         ) : (
           <div className="divide-y divide-gray-100">
-            {customer.reservations.map((r) => (
-              <div key={r.id} className="flex items-center justify-between p-4">
-                <div>
-                  <p className="font-medium text-gray-900 text-sm">
-                    {new Date(r.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
-                    {" · "}
-                    {r.time.slice(0, 5)}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {r.pax} pax{r.table_number ? ` · Table ${r.table_number}` : ""}
-                    {r.notes ? ` · ${r.notes}` : ""}
-                  </p>
+            {customer.reservations.map((r) => {
+              const txList = r.transactions || [];
+              const txSum = txList.reduce((acc, t) => acc + t.amount, 0);
+              return (
+                <div key={r.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">
+                      {new Date(`${r.date}T00:00:00`).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      {" · "}
+                      {r.time.slice(0, 5)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {r.pax} pax{r.table_number ? ` · Table ${r.table_number}` : ""}
+                      {r.notes ? ` · "${r.notes}"` : ""}
+                    </p>
+                    {txList.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-1.5">
+                        {txList.map((tx) => (
+                          <span
+                            key={tx.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs font-medium"
+                          >
+                            <Receipt className="w-3 h-3" />
+                            {tx.amount.toLocaleString()} EGP
+                            {tx.pos_receipt_id ? ` (${tx.pos_receipt_id})` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {txSum === 0 && r.status !== "no_show" && (
+                      <button
+                        onClick={() =>
+                          setBillingReservation({
+                            ...r,
+                            customer,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100"
+                      >
+                        <Receipt className="w-3.5 h-3.5" />
+                        Add Bill
+                      </button>
+                    )}
+                    <StatusBadge status={r.status} />
+                  </div>
                 </div>
-                <StatusBadge status={r.status} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+
+      {billingReservation && (
+        <RecordBillModal
+          reservation={billingReservation}
+          onClose={() => setBillingReservation(null)}
+          onRecorded={loadData}
+        />
+      )}
     </div>
   );
 }
