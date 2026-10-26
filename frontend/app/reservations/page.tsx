@@ -9,12 +9,20 @@ import {
   ChevronDown,
   Pencil,
   Receipt,
+  CalendarRange,
+  Table2,
 } from "lucide-react";
-import { api, type Reservation, type ReservationStatus } from "@/lib/api";
+import {
+  api,
+  type Reservation,
+  type RestaurantTable,
+  type ReservationStatus,
+} from "@/lib/api";
 import { StatusBadge, TierBadge } from "@/components/Badges";
 import { CreateReservationModal } from "@/components/CreateReservationModal";
 import { EditReservationModal } from "@/components/EditReservationModal";
 import { RecordBillModal } from "@/components/RecordBillModal";
+import { ReservationTimeBlockCalendar } from "@/components/ReservationTimeBlockCalendar";
 
 const statusOptions: { value: ReservationStatus | "all"; label: string }[] = [
   { value: "all", label: "All Status" },
@@ -33,8 +41,12 @@ const statusActions: { status: ReservationStatus; label: string; className: stri
 
 export default function ReservationsPage() {
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"calendar" | "table">("calendar");
   const [showModal, setShowModal] = useState(false);
+  const [prefillTime, setPrefillTime] = useState<string | undefined>(undefined);
+  const [prefillTable, setPrefillTable] = useState<number | null>(null);
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null);
   const [billingReservation, setBillingReservation] = useState<Reservation | null>(null);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split("T")[0]);
@@ -46,8 +58,12 @@ export default function ReservationsPage() {
       const params: { date?: string; status?: ReservationStatus } = {};
       if (filterDate) params.date = filterDate;
       if (filterStatus !== "all") params.status = filterStatus;
-      const data = await api.getReservations(params);
+      const [data, tbls] = await Promise.all([
+        api.getReservations(params),
+        api.getTables(),
+      ]);
       setReservations(data);
+      setTables(tbls);
     } catch (err) {
       console.error("Failed to load reservations:", err);
     } finally {
@@ -78,17 +94,54 @@ export default function ReservationsPage() {
     }
   };
 
+  const handleCreateFromCalendarSlot = (tableNumber: number | null, timeStr: string) => {
+    setPrefillTable(tableNumber);
+    setPrefillTime(timeStr);
+    setShowModal(true);
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Reservations</h1>
-        <button
-          onClick={() => setShowModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600"
-        >
-          <CalendarPlus className="w-4 h-4" />
-          New Reservation
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-lg border border-gray-300 bg-white p-0.5">
+            <button
+              onClick={() => setViewMode("calendar")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium ${
+                viewMode === "calendar"
+                  ? "bg-brand-500 text-white"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <CalendarRange className="w-3.5 h-3.5" />
+              Calendar Blocks
+            </button>
+            <button
+              onClick={() => setViewMode("table")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium ${
+                viewMode === "table"
+                  ? "bg-brand-500 text-white"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <Table2 className="w-3.5 h-3.5" />
+              Table List
+            </button>
+          </div>
+
+          <button
+            onClick={() => {
+              setPrefillTable(null);
+              setPrefillTime(undefined);
+              setShowModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-lg text-sm font-medium hover:bg-brand-600"
+          >
+            <CalendarPlus className="w-4 h-4" />
+            New Reservation
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -99,7 +152,7 @@ export default function ReservationsPage() {
           onChange={(e) => setFilterDate(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"
         />
-        {filterDate && (
+        {viewMode === "table" && filterDate && (
           <button
             onClick={() => setFilterDate("")}
             className="px-3 py-2 border border-gray-300 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50"
@@ -120,137 +173,152 @@ export default function ReservationsPage() {
         </select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
-        {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
-          </div>
-        ) : reservations.length === 0 ? (
-          <p className="text-center text-gray-400 py-12">No reservations found</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Date & Time</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Customer</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Pax</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Table</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Tier</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Bill</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {reservations.map((r) => {
-                  const billSum =
-                    r.transactions?.reduce((acc, tx) => acc + tx.amount, 0) ?? 0;
-                  return (
-                    <tr key={r.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-gray-900">
-                        <div className="font-medium">{r.time.slice(0, 5)}</div>
-                        <div className="text-xs text-gray-500">{r.date}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {r.customer ? (
-                          <Link
-                            href={`/customers/${r.customer.id}`}
-                            className="font-medium text-gray-900 hover:text-brand-600"
-                          >
-                            {r.customer.name}
-                          </Link>
-                        ) : (
-                          <div className="font-medium text-gray-900">Unknown</div>
-                        )}
-                        <div className="text-xs text-gray-500">{r.customer?.phone_number}</div>
-                        {r.notes && (
-                          <div className="text-xs text-amber-700 mt-0.5 italic">
-                            &ldquo;{r.notes}&rdquo;
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-200 flex items-center justify-center h-40">
+          <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+        </div>
+      ) : viewMode === "calendar" ? (
+        <ReservationTimeBlockCalendar
+          reservations={reservations}
+          tables={tables}
+          selectedDate={filterDate || new Date().toISOString().split("T")[0]}
+          onCreateSlot={handleCreateFromCalendarSlot}
+          onSelectReservation={(r) => setEditingReservation(r)}
+          onBillReservation={(r) => setBillingReservation(r)}
+          onStatusChange={handleStatusChange}
+        />
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-visible">
+          {reservations.length === 0 ? (
+            <p className="text-center text-gray-400 py-12">No reservations found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Date & Time</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Customer</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Pax</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Table</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Tier</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Bill</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {reservations.map((r) => {
+                    const billSum =
+                      r.transactions?.reduce((acc, tx) => acc + tx.amount, 0) ?? 0;
+                    return (
+                      <tr key={r.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-900">
+                          <div className="font-medium">
+                            {r.time.slice(0, 5)} ({r.duration_minutes || 90}m)
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">{r.pax}</td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {r.table_number ? `Table ${r.table_number}` : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {r.customer && r.customer.loyalty_tier !== "none" ? (
-                          <TierBadge tier={r.customer.loyalty_tier} />
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {billSum > 0 ? (
-                          <span className="font-medium text-emerald-700">
-                            {billSum.toLocaleString()} EGP
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={r.status} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <div className="relative group">
-                            <button className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50">
-                              Status <ChevronDown className="w-3 h-3" />
-                            </button>
-                            <div className="absolute right-0 top-full mt-1 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 z-20 min-w-[120px]">
-                              {statusActions.map((action) => (
-                                <button
-                                  key={action.status}
-                                  onClick={() => handleStatusChange(r.id, action.status)}
-                                  className={`px-3 py-1.5 text-xs font-medium rounded-md text-left ${action.className}`}
-                                >
-                                  {action.label}
-                                </button>
-                              ))}
+                          <div className="text-xs text-gray-500">{r.date}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.customer ? (
+                            <Link
+                              href={`/customers/${r.customer.id}`}
+                              className="font-medium text-gray-900 hover:text-brand-600"
+                            >
+                              {r.customer.name}
+                            </Link>
+                          ) : (
+                            <div className="font-medium text-gray-900">Unknown</div>
+                          )}
+                          <div className="text-xs text-gray-500">{r.customer?.phone_number}</div>
+                          {r.notes && (
+                            <div className="text-xs text-amber-700 mt-0.5 italic">
+                              &ldquo;{r.notes}&rdquo;
                             </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{r.pax}</td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {r.table_number ? `Table ${r.table_number}` : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.customer && r.customer.loyalty_tier !== "none" ? (
+                            <TierBadge tier={r.customer.loyalty_tier} />
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {billSum > 0 ? (
+                            <span className="font-medium text-emerald-700">
+                              {billSum.toLocaleString()} EGP
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <StatusBadge status={r.status} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <div className="relative group">
+                              <button className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50">
+                                Status <ChevronDown className="w-3 h-3" />
+                              </button>
+                              <div className="absolute right-0 top-full mt-1 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-lg shadow-lg p-1 z-20 min-w-[120px]">
+                                {statusActions.map((action) => (
+                                  <button
+                                    key={action.status}
+                                    onClick={() => handleStatusChange(r.id, action.status)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-md text-left ${action.className}`}
+                                  >
+                                    {action.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => setBillingReservation(r)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100"
+                              title="Record POS Bill"
+                            >
+                              <Receipt className="w-3.5 h-3.5" />
+                              Bill
+                            </button>
+
+                            <button
+                              onClick={() => setEditingReservation(r)}
+                              className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100"
+                              title="Edit Reservation"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+
+                            <button
+                              onClick={() => handleDelete(r.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50"
+                              title="Cancel Reservation"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
-
-                          <button
-                            onClick={() => setBillingReservation(r)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-md hover:bg-emerald-100"
-                            title="Record POS Bill"
-                          >
-                            <Receipt className="w-3.5 h-3.5" />
-                            Bill
-                          </button>
-
-                          <button
-                            onClick={() => setEditingReservation(r)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100"
-                            title="Edit Reservation"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-
-                          <button
-                            onClick={() => handleDelete(r.id)}
-                            className="p-1.5 text-gray-400 hover:text-red-500 rounded-md hover:bg-red-50"
-                            title="Cancel Reservation"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {showModal && (
         <CreateReservationModal
           defaultDate={filterDate || undefined}
+          defaultTime={prefillTime}
+          defaultTableNumber={prefillTable}
           onClose={() => setShowModal(false)}
           onCreated={loadData}
         />
